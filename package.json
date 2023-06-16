@@ -20,10 +20,34 @@
           "default": "",
           "description": "The path for targeted JSON file to update"
         },
-        "extension.keyForAutoAddedFields": {
+        "extension.valueLabelKeyType": {
+          "type": "string",
+          "enum": [
+            "camelcase",
+            "uppercase"
+          ],
+          "default": "camelcase",
+          "description": "Choose the format for the key value label"
+        },
+        "extension.jsonType": {
+          "type": "string",
+          "enum": [
+            "nested",
+            "flat"
+          ],
+          "default": "nested",
+          "description": "If you want your text to be added in a nested object directly at the root"
+        },
+        "extension.nestedKeyLabel": {
           "type": "string",
           "default": "autoAddedFields",
-          "description": "The key name for all auto added fields"
+          "description": "The key label for auto added fields if nested",
+          "configurationCondition": "${extension.jsonType} == 'nested'"
+        },
+        "extension.replacementTemplate": {
+          "type": "string",
+          "default": "",
+          "description": "The replacement template exemple : {{ TXT.$VAR$ }}. The $VAR$ will be replaced by the selected text"
         }
       }
     },
