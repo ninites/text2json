@@ -1,7 +1,7 @@
 {
-  "name": "izi18n",
-  "displayName": "Izi18n",
-  "description": "izi",
+  "name": "text-2-json",
+  "displayName": "text-2-json",
+  "description": "Copy selected text to a JSON file ( cool for i18n )",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.79.0"
@@ -13,7 +13,7 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "IZI Copy To Folder",
+      "title": "Text 2 JSON",
       "properties": {
         "extension.targetedFile": {
           "type": "string",
