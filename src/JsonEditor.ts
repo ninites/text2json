@@ -1,121 +1,98 @@
 import * as fs from 'fs';
 import { Utils } from './Utils';
+import * as _ from 'lodash';
+import { AlreadyExistingKeyError, NoFileFoundError, ValueAlreadyExistsError } from './Errors';
 
 type JsonEditorConfig = {
   targetPath: string;
   text: string;
-  nestedKeyLabel: string;
-  newValueKeyLabel: string;
+  key: string;
   replacementTemplate: string;
-  newValueKeyFormat: 'uppercase' | 'camelcase';
-  jsonType: 'nested' | 'flat';
+  keyCase: 'uppercase' | 'camelcase';
 };
 
-type TextJson = { [key: string]: any };
+type TextJson = { [key: string]: any } | null;
 
 class JsonEditor {
 
   private readonly targetPath: string;
   private readonly text: string;
-  private readonly nestedKeyLabel: string;
-  private readonly newValueKeyLabel: string;
+  private readonly key: string;
   private readonly utils: Utils;
   private readonly replacementTemplate: string;
-  private readonly newValueKeyFormat: 'uppercase' | 'camelcase';
-  private readonly jsonType: 'nested' | 'flat';
+  private readonly format: 'uppercase' | 'camelcase';
 
   constructor(config: JsonEditorConfig = {
     targetPath: '',
     text: '',
-    nestedKeyLabel: '',
-    newValueKeyLabel: '',
+    key: '',
     replacementTemplate: '',
-    newValueKeyFormat: 'camelcase',
-    jsonType: 'nested'
+    keyCase: 'camelcase',
   }, utils: Utils = new Utils()
   ) {
     this.utils = utils;
     this.text = config.text;
     this.targetPath = config.targetPath;
-    this.nestedKeyLabel = config.nestedKeyLabel;
-    this.newValueKeyFormat = config.newValueKeyFormat;
-    this.newValueKeyLabel = this.formatKeyToConfiguredFormat(config.newValueKeyLabel);
+    this.format = config.keyCase;
     this.replacementTemplate = config.replacementTemplate;
-    this.jsonType = config.jsonType;
+    this.key = this.formatKeyToConfiguredFormat(config.key, this.format);
+    this.json = this.readJSONFile(this.targetPath);
   }
+
+  json: TextJson = null;
 
   public updateJSONFile(): string {
-    const jsonToBeUpdated = this.getJSONToBeUpdated();
-    switch (this.jsonType) {
-      case "nested":
-        return this.handleNestedJSON(jsonToBeUpdated);
-      case "flat":
-        return this.handleFlatJSON(jsonToBeUpdated);
+    if (!this.fileExists()) {
+      throw new NoFileFoundError(this.targetPath);
     }
+
+    const keyAlreadyExists = _.has(this.json, this.key);
+    if (keyAlreadyExists) {
+      throw new AlreadyExistingKeyError(this.key);
+    }
+
+    const valueAlreadyExists = this.valueAlreadyExists(this.json, this.text, this.key);
+    if (valueAlreadyExists) {
+      const nestedObject = this.getNestedObject(this.json, this.key);
+      const alreadyExistingKey = _.findKey(nestedObject, (v) => v === this.text) || '';
+      throw new ValueAlreadyExistsError(alreadyExistingKey, this.text);
+    }
+
+    const updatedJSON = _.set(this.json || {}, this.key, this.formatAndInlineText(this.text));
+
+    this.updateFile(updatedJSON);
+    return this.keyTemplateReplacement(this.key, this.replacementTemplate);
   };
 
-  public getJSONToBeUpdated(): TextJson {
-    let jsonToBeUpdated = this.readJSONFile();
-    if (!jsonToBeUpdated[this.nestedKeyLabel]) {
-      jsonToBeUpdated[this.nestedKeyLabel] = {};
-    }
-    return jsonToBeUpdated;
+  public getReplacementTemplate() {
+    const isRootLevel = this.key.split('.').length === 1;
+    const object = isRootLevel ? this.json : this.getNestedObject(this.json, this.key);
+    const alreadyExistingKey = _.findKey(object, (v) => v === this.text) || '';
+    return this.keyTemplateReplacement(alreadyExistingKey, this.replacementTemplate);
   }
 
-  public addTextToJSON(file: TextJson): TextJson {
-    switch (this.jsonType) {
-      case "nested":
-        file[this.nestedKeyLabel][this.newValueKeyLabel] = this.formatAndInlineText(this.text);
-        return file;
-      case "flat":
-        file[this.newValueKeyLabel] = this.formatAndInlineText(this.text);
-        return file;
-    }
+  public fileExists(): boolean {
+    return this.json !== null;
   }
 
-  public updateFile(file: TextJson): void {
+  private valueAlreadyExists(file: TextJson, value: string, key: JsonEditorConfig['key']): boolean {
+    const isRootLevel = key.split('.').length === 1;
+    const object = isRootLevel ? file : this.getNestedObject(file, key);
+    const valueAlreadyExists = _.findKey(object, (v) => v === value);
+    return !!valueAlreadyExists;
+  }
+
+  private getNestedObject(file: TextJson, key: JsonEditorConfig['key']): TextJson {
+    const pathWithoutLastKey = key.split('.').slice(0, -1).join('.');
+    const object = _.get(file, pathWithoutLastKey);
+    return object;
+  }
+
+  private updateFile(file: TextJson): void {
     const data = JSON.stringify(file, null, 4);
     fs.writeFileSync(this.targetPath, data);
     return;
   };
-
-  private handleNestedJSON(jsonToBeUpdated: TextJson): string {
-    const textFieldKeyAlreadyExists = jsonToBeUpdated[this.nestedKeyLabel][this.newValueKeyLabel] ? true : false;
-    if (textFieldKeyAlreadyExists) {
-      throw new Error('Key already exists');
-    }
-
-    const valueAlreadyExists = Object.values(jsonToBeUpdated[this.nestedKeyLabel]).includes(this.text);
-    if (valueAlreadyExists) {
-      const alreadyExistingKey = this.getKeyFromValueForNestedType(jsonToBeUpdated);
-      throw new Error(`Value already exists KEY: ${alreadyExistingKey}`);
-    }
-    const jsonWithNewValue = this.addTextToJSON(jsonToBeUpdated);
-    this.updateFile(jsonWithNewValue);
-    return this.keyTemplateReplacement(this.newValueKeyLabel);
-  }
-
-  private handleFlatJSON(jsonToBeUpdated: TextJson): string {
-    const keyAlreadyExists = Object.keys(jsonToBeUpdated).includes(this.newValueKeyLabel);
-    if (keyAlreadyExists) {
-      throw new Error('Key already exists');
-    }
-
-    const valueAlreadyExists = Object.values(jsonToBeUpdated).includes(this.text);
-    if (valueAlreadyExists) {
-      const alreadyExistingKey = Object.keys(jsonToBeUpdated)[Object.values(jsonToBeUpdated).indexOf(this.text)];
-      throw new Error(`Value already exists KEY: ${alreadyExistingKey}`);
-    }
-    const jsonWithNewValue = this.addTextToJSON(jsonToBeUpdated);
-    this.updateFile(jsonWithNewValue);
-    return this.keyTemplateReplacement(this.newValueKeyLabel);
-  }
-
-  private getKeyFromValueForNestedType(file: TextJson): string {
-    const values = Object.values(file[this.nestedKeyLabel]);
-    const key = Object.keys(file[this.nestedKeyLabel])[values.indexOf(this.text)];
-    return key;
-  }
 
   private formatAndInlineText(text: string): string {
     const textWithoutMultiSpaces = text.replace(/\s\s+/g, ' ');
@@ -123,31 +100,40 @@ class JsonEditor {
     return textWithoutNewLines;
   };
 
-  private readJSONFile(): TextJson {
-    const data = fs.readFileSync(this.targetPath, 'utf8');
-    if (!data) {
-      throw new Error('File is empty');
+  private readJSONFile(path: JsonEditor['targetPath']): TextJson {
+    try {
+      const data = fs.readFileSync(path, 'utf8');
+      const file = JSON.parse(data);
+      return file;
+    } catch (error) {
+      return null;
     }
-    const file = JSON.parse(data);
-    return file;
   };
 
-  private formatKeyToConfiguredFormat(value: string): string {
-    switch (this.newValueKeyFormat) {
-      case "camelcase":
-        return this.utils.toCamelCase(value);
-      case "uppercase":
-        return value.toUpperCase();
-    }
+  private formatKeyToConfiguredFormat(value: string, format: JsonEditor["format"]): string {
+    const keys = value.split('.');
+    const formattedKeys = keys.map((key) => {
+      switch (format) {
+        case "camelcase":
+          return this.utils.toCamelCase(key);
+        case "uppercase":
+          return key.toUpperCase();
+        default:
+          return key;
+      }
+    });
+    return formattedKeys.join('.');
   }
 
-  private keyTemplateReplacement(key: string): string {
-    if (!this.replacementTemplate) {
+  private keyTemplateReplacement(key: JsonEditor["key"], replacement: JsonEditor["replacementTemplate"]): string {
+    if (!replacement) {
       return key;
     }
 
-    const template = this.replacementTemplate;
-    const updatedKey = template.replace(/\$VAR\$/g, key);
+    const template = replacement;
+    const splittedKey = key.split('.');
+    const finalKey = splittedKey.length > 1 ? splittedKey[splittedKey.length - 1] : key;
+    const updatedKey = template.replace(/\$VAR\$/g, finalKey);
     return updatedKey;
   }
 

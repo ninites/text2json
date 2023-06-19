@@ -1,33 +1,35 @@
 import * as vscode from 'vscode';
 import { JsonEditor, JsonEditorConfig } from './JsonEditor';
+import { LocalErrors, ValueAlreadyExistsError } from './Errors';
 
 export function activate(context: vscode.ExtensionContext) {
 
 	let disposable = vscode.commands.registerTextEditorCommand('extension.copyToFolder', async (textEditor, edit) => {
-		const newValueKeyLabel = await vscode.window.showInputBox({
-			prompt: 'Enter your key label for the new value'
+		const key = await vscode.window.showInputBox({
+			prompt: 'Enter your key label for the new text value (dot notation) '
 		});
 
-		if (newValueKeyLabel) {
-			const { selectedText, nestedKeyLabel, targetedFile, replacementTemplate, newValueKeyFormat, jsonType } = getConfig(textEditor);
-			if (targetedFile) {
+		if (key) {
+			const { text, targetPath, replacementTemplate, keyCase } = getConfig(textEditor);
+			if (targetPath) {
+
+				const config: JsonEditorConfig = {
+					targetPath,
+					text,
+					replacementTemplate,
+					key,
+					keyCase,
+				};
+
+				const jsonEditor = new JsonEditor(config);
+
 				try {
-					const config: JsonEditorConfig = {
-						targetPath: targetedFile,
-						text: selectedText,
-						nestedKeyLabel: nestedKeyLabel,
-						newValueKeyLabel: newValueKeyLabel,
-						replacementTemplate: replacementTemplate,
-						newValueKeyFormat: newValueKeyFormat,
-						jsonType: jsonType
-					};
-					const jsonEditor = new JsonEditor(config);
 					const replacement = jsonEditor.updateJSONFile();
 					textEditor.edit((editBuilder) => {
 						editBuilder.replace(textEditor.selection, replacement);
 					});
 				} catch (error: any) {
-					vscode.window.showErrorMessage(`Error occurred while updating JSON file. ${error.message}`);
+					handleErrors(error, jsonEditor);
 				}
 
 			} else {
@@ -47,20 +49,35 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 const getConfig = (textEditor: any) => {
-	const selectedText = textEditor.document.getText(textEditor.selection);
-	const nestedKeyLabel = vscode.workspace.getConfiguration().get('extension.nestedKeyLabel') as string;
-	const targetedFile = vscode.workspace.getConfiguration().get('extension.targetedFile') as string;
+	const text = textEditor.document.getText(textEditor.selection);
+	const targetPath = vscode.workspace.getConfiguration().get('extension.targetPath') as string;
 	const replacementTemplate = vscode.workspace.getConfiguration().get('extension.replacementTemplate') as string;
-	const newValueKeyFormat = vscode.workspace.getConfiguration().get('extension.valueLabelKeyType') as 'uppercase' | 'camelcase';
-	const jsonType = vscode.workspace.getConfiguration().get('extension.jsonType') as 'nested' | 'flat';
+	const keyCase = vscode.workspace.getConfiguration().get('extension.keyCase') as 'uppercase' | 'camelcase';
 	return {
-		selectedText,
-		nestedKeyLabel,
-		targetedFile,
+		text,
+		targetPath,
 		replacementTemplate,
-		newValueKeyFormat,
-		jsonType
+		keyCase,
 	};
+};
+
+const handleErrors = async (error: any, jsonEditor: JsonEditor) => {
+	const notLocalError = !(error instanceof LocalErrors);
+	if (notLocalError) {
+		vscode.window.showErrorMessage(`Error occurred while updating JSON file. ${error.message}`);
+		return;
+	}
+
+	if (error instanceof ValueAlreadyExistsError) {
+		await vscode.window.showErrorMessage(error.message);
+		const copyPastePart = jsonEditor.getReplacementTemplate();
+		await vscode.env.clipboard.writeText(copyPastePart);
+		vscode.window.showInformationMessage(`Copied to clipboard: ${copyPastePart}`);
+		return;
+	}
+
+	vscode.window.showErrorMessage(error.message);
+	return;
 };
 
 vscode.workspace.onDidChangeConfiguration((event) => {
