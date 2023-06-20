@@ -22,13 +22,15 @@ class JsonEditor {
   private readonly replacementTemplate: string;
   private readonly format: 'uppercase' | 'camelcase';
 
-  constructor(config: JsonEditorConfig = {
-    targetPath: '',
-    text: '',
-    key: '',
-    replacementTemplate: '',
-    keyCase: 'camelcase',
-  }, utils: Utils = new Utils()
+  constructor(
+    config: JsonEditorConfig = {
+      targetPath: '',
+      text: '',
+      key: '',
+      replacementTemplate: '',
+      keyCase: 'camelcase',
+    },
+    utils: Utils = new Utils()
   ) {
     this.utils = utils;
     this.text = config.text;
@@ -60,7 +62,7 @@ class JsonEditor {
 
     const updatedJSON = _.set(this.json || {}, this.key, this.formatAndInlineText(this.text));
 
-    this.updateFile(updatedJSON);
+    this.updateFile(updatedJSON, this.targetPath);
     return this.keyTemplateReplacement(this.key, this.replacementTemplate);
   };
 
@@ -88,9 +90,9 @@ class JsonEditor {
     return object;
   }
 
-  private updateFile(file: TextJson): void {
+  private updateFile(file: TextJson, path: string): void {
     const data = JSON.stringify(file, null, 4);
-    fs.writeFileSync(this.targetPath, data);
+    fs.writeFileSync(path, data);
     return;
   };
 
