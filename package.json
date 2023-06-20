@@ -3,7 +3,7 @@
   "displayName": "text-2-json",
   "description": "Copy selected text to a JSON file ( cool for i18n )",
   "publisher": "ninitesSs",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.79.0"
   },
