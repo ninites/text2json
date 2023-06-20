@@ -20,4 +20,10 @@ class NoFileFoundError extends LocalErrors {
 
 }
 
-export { AlreadyExistingKeyError, ValueAlreadyExistsError, NoFileFoundError, LocalErrors };
+class TooManyProjectFoldersError extends LocalErrors {
+    constructor() {
+        super('Too many project folders found');
+    }
+}
+
+export { AlreadyExistingKeyError, ValueAlreadyExistsError, NoFileFoundError, LocalErrors, TooManyProjectFoldersError };

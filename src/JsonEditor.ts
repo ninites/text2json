@@ -1,43 +1,47 @@
 import * as fs from 'fs';
-import { Utils } from './Utils';
 import * as _ from 'lodash';
-import { AlreadyExistingKeyError, NoFileFoundError, ValueAlreadyExistsError } from './Errors';
-
-type JsonEditorConfig = {
-  targetPath: string;
-  text: string;
-  key: string;
-  replacementTemplate: string;
-  keyCase: 'uppercase' | 'camelcase';
-};
+import { Utils } from './Utils';
+import { AlreadyExistingKeyError, NoFileFoundError, TooManyProjectFoldersError, ValueAlreadyExistsError } from './Errors';
 
 type TextJson = { [key: string]: any } | null;
+type JsonEditorConfig = {
+  text: string;
+  key: string;
+  keyCase: 'uppercase' | 'camelcase';
+  filePath: string;
+  parameters: { [key: string]: any };
+};
+
+
 
 class JsonEditor {
 
-  private readonly targetPath: string;
   private readonly text: string;
   private readonly key: string;
   private readonly utils: Utils;
-  private readonly replacementTemplate: string;
   private readonly format: 'uppercase' | 'camelcase';
+  private readonly filePath: string;
+  private readonly replacementTemplate: string;
+  private readonly targetPath: string;
 
   constructor(
     config: JsonEditorConfig = {
-      targetPath: '',
       text: '',
       key: '',
-      replacementTemplate: '',
       keyCase: 'camelcase',
+      filePath: '',
+      parameters: {},
     },
     utils: Utils = new Utils()
   ) {
     this.utils = utils;
     this.text = config.text;
-    this.targetPath = config.targetPath;
     this.format = config.keyCase;
-    this.replacementTemplate = config.replacementTemplate;
     this.key = this.formatKeyToConfiguredFormat(config.key, this.format);
+    this.filePath = config.filePath;
+    const { replacementTemplate, targetPath } = this.getParametersFromFilePath(this.filePath, config.parameters);
+    this.replacementTemplate = replacementTemplate;
+    this.targetPath = targetPath;
     this.json = this.readJSONFile(this.targetPath);
   }
 
@@ -77,6 +81,52 @@ class JsonEditor {
     return this.json !== null;
   }
 
+  private getParametersFromFilePath(filePath: string, parameters: { [key: string]: any }): { replacementTemplate: string, targetPath: string } {
+    const result = {
+      replacementTemplate: '',
+      targetPath: '',
+    };
+
+    const validApps = Object.values(parameters).filter((parameter) => {
+      const app = parameter.app;
+      const regex = new RegExp(`\\b${app}\\b`, 'g');
+      const isAppVariableExists = regex.test(filePath);
+      return isAppVariableExists;
+    });
+
+    if (validApps.length === 0) {
+      return result;
+    }
+
+    let validProject = validApps[0];
+
+    const needToCheckProject = validApps.length > 1;
+    if (needToCheckProject) {
+      const validProjects = validApps.filter((parameter) => {
+        const project = parameter.project;
+        const regex = new RegExp(`\\b${project}\\b`, 'g');
+        const isProjectVariableExists = regex.test(filePath);
+        return isProjectVariableExists;
+      });
+
+      if (validProjects.length === 0) {
+        return result;
+      }
+
+      if (validProjects.length > 1) {
+        throw new TooManyProjectFoldersError();
+      }
+
+      validProject = validProjects[0];
+    }
+
+    const extension = filePath.split('.').pop() || '';
+    result.replacementTemplate = validProject.templates[extension];
+    result.targetPath = validProject.targetPath;
+
+    return result;
+  }
+
   private valueAlreadyExists(file: TextJson, value: string, key: JsonEditorConfig['key']): boolean {
     const isRootLevel = key.split('.').length === 1;
     const object = isRootLevel ? file : this.getNestedObject(file, key);
@@ -102,7 +152,7 @@ class JsonEditor {
     return textWithoutNewLines;
   };
 
-  private readJSONFile(path: JsonEditor['targetPath']): TextJson {
+  private readJSONFile(path: string): TextJson {
     try {
       const data = fs.readFileSync(path, 'utf8');
       const file = JSON.parse(data);
@@ -127,7 +177,7 @@ class JsonEditor {
     return formattedKeys.join('.');
   }
 
-  private keyTemplateReplacement(key: JsonEditor["key"], replacement: JsonEditor["replacementTemplate"]): string {
+  private keyTemplateReplacement(key: JsonEditor["key"], replacement: string): string {
     if (!replacement) {
       return key;
     }

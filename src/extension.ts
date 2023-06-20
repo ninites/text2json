@@ -10,15 +10,15 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 
 		if (key) {
-			const { text, targetPath, replacementTemplate, keyCase } = getConfig(textEditor);
-			if (targetPath) {
+			const { text, keyCase, filePath, parameters } = getConfig(textEditor);
+			if (parameters) {
 
 				const config: JsonEditorConfig = {
-					targetPath,
 					text,
-					replacementTemplate,
 					key,
 					keyCase,
+					filePath,
+					parameters
 				};
 
 				const jsonEditor = new JsonEditor(config);
@@ -49,15 +49,17 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 const getConfig = (textEditor: any) => {
+	const config = vscode.workspace.getConfiguration();
 	const text = textEditor.document.getText(textEditor.selection);
-	const targetPath = vscode.workspace.getConfiguration().get('extension.targetPath') as string;
-	const replacementTemplate = vscode.workspace.getConfiguration().get('extension.replacementTemplate') as string;
-	const keyCase = vscode.workspace.getConfiguration().get('extension.keyCase') as 'uppercase' | 'camelcase';
+	const keyCase = config.get('extension.keyCase') as 'uppercase' | 'camelcase';
+	const parameters = config.get('extension.parameters') as { [key: string]: any };
+	const filePath = textEditor.document.uri.fsPath;
+
 	return {
 		text,
-		targetPath,
-		replacementTemplate,
 		keyCase,
+		filePath,
+		parameters
 	};
 };
 
@@ -82,7 +84,6 @@ const handleErrors = async (error: any, jsonEditor: JsonEditor) => {
 
 vscode.workspace.onDidChangeConfiguration((event) => {
 	if (event.affectsConfiguration('extension.targetFolderPath')) {
-		// Perform any necessary actions when the configuration is updated
 	}
 });
 

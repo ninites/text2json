@@ -3,7 +3,7 @@
   "displayName": "text-2-json",
   "description": "Copy selected text to a JSON file ( cool for i18n )",
   "publisher": "ninitesSs",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.79.0"
   },
@@ -16,15 +16,11 @@
     "configuration": {
       "title": "Text 2 JSON",
       "properties": {
-        "extension.targetPath": {
-          "type": "string",
-          "default": "",
-          "description": "The path for targeted JSON file to update"
-        },
-        "extension.replacementTemplate": {
-          "type": "string",
-          "default": "",
-          "description": "The replacement template exemple : {{ TXT.$VAR$ }}. The $VAR$ will be replaced by the selected text"
+        "extension.parameters": {
+          "type": "object",
+          "default": {},
+          "description": "Parameters",
+          "markdownDescription": "Enter your configuration here."
         },
         "extension.keyCase": {
           "type": "string",
